@@ -1,0 +1,183 @@
+================================================================
+  RESUME COMPLET DES MODIFICATIONS - PROJET MOFID
+  Fait par : Mohamed Larabi
+  Date     : 05/03/2026
+================================================================
+
+=== FICHIERS CREES (de zero, nouveaux fichiers) ===
+
+[BACKEND / CONFIGURATION]
+--------------------------------------------------
+1. .env.local
+   - Variables d'environnement Supabase (URL, Anon Key, Service Role Key)
+
+2. database_setup.sql
+   - Script SQL pour creer la table `public.profiles`
+   - Row Level Security (RLS) pour la table profiles
+   - Politiques d'acces (lecture pour tous, modification uniquement pour soi)
+   - Trigger `on_auth_user_created` pour remplir auto le profil a l'inscription
+
+[BACKEND / SUPABASE]
+--------------------------------------------------
+3. src/utils/supabase/client.ts
+   - Initialisation du client Supabase cote navigateur (createBrowserClient de @supabase/ssr)
+   - Exporte `supabase` pour utilisation dans les fonctions d'auth
+
+4. src/utils/supabase/server.ts
+   - Initialisation du client Supabase cote serveur (createServerClient de @supabase/ssr)
+   - Gestion des cookies de session pour Next.js (obligatoire pour les API routes)
+
+5. src/utils/supabase/auth.ts
+   - signUpUser(data) : Inscription email/mot de passe avec metadonnees (nom, role, specialite, licence)
+   - logInUser(email, password) : Connexion email/mot de passe
+   - logInWithGoogle() : Demarrage du flux OAuth Google, redirection vers /auth/callback
+   - logOutUser() : Deconnexion
+   - getCurrentUser() : Recuperer l'utilisateur courant (utile apres OAuth)
+   - updateUserProfile(data) : Mettre a jour les metadonnees + mot de passe (pour completion profil Google)
+
+[BACKEND / ROUTE API NEXT.JS]
+--------------------------------------------------
+6. src/app/auth/callback/route.ts
+   - Route API (GET) qui intercepte le retour de Google OAuth
+   - Echange le `code` contre une session Supabase (exchangeCodeForSession)
+   - Recupere le type de compte (doctor / patient) depuis user_metadata
+   - Redirige vers /dashboardoctlarabi ou /dashboardpatientlarabi
+   - Si profil incomplet (pas de account_type) -> redirige vers /signup?step=complete
+
+7. src/app/auth/auth-error/page.tsx
+   - Page d'erreur simple si le flux OAuth echoue
+   - Bouton "Retour a la page de connexion"
+
+[FRONTEND / DASHBOARDS PROVISOIRES]
+--------------------------------------------------
+8. src/app/dashboardoctlarabi/page.tsx
+   - Dashboard temporaire pour les Docteurs
+   - Contient une note jaune pour l'equipe frontend
+   - Marque avec // made by mohamed (debut et fin)
+
+9. src/app/dashboardpatientlarabi/page.tsx
+   - Dashboard temporaire pour les Patients
+   - Contient une note jaune pour l'equipe frontend
+   - Marque avec // made by mohamed (debut et fin)
+
+
+=== FICHIERS MODIFIES (code ajoute dans fichiers existants) ===
+
+[FRONTEND / COMPOSANT]
+--------------------------------------------------
+10. src/components/AnimatedInput.tsx (MODIFIE)
+    - Ajout des props `value` et `onChange` pour en faire un composant controle (controlled input)
+    - Ajout de la prop `disabled` pour verrouiller un champ (ex: email venant de Google)
+    - Style grise applique quand `disabled=true`
+
+[FRONTEND / PAGE LOGIN]
+--------------------------------------------------
+11. src/app/login/page.tsx (MODIFIE)
+    - Import de `useRouter` pour la redirection
+    - Import de `logInUser` et `logInWithGoogle` depuis les utilitaires Supabase
+    - Ajout des etats : email, password, loading, error, success
+    - handleGoogleLogin() : appel de logInWithGoogle()
+    - handleSubmit() : appel de logInUser() avec email/password
+    - Affichage des messages d'erreur et de succes (AnimatePresence)
+    - Redirection automatique apres connexion selon le type de compte :
+        * Docteur  -> /dashboardoctlarabi
+        * Patient  -> /dashboardpatientlarabi
+
+[FRONTEND / PAGE SIGNUP]
+--------------------------------------------------
+12. src/app/signup/page.tsx (MODIFIE)
+    - Import de `useRouter`, `useSearchParams`, `useEffect` pour la redirection et la detection OAuth
+    - Import de `signUpUser`, `updateUserProfile`, `getCurrentUser`, `logInWithGoogle`
+    - Ajout des etats : accountType, name, email, password, confirmPassword, specialty, license, loading, error, success
+    - Logique de completion de profil Google (isGoogleCompletion via ?step=complete) :
+        * Pre-remplissage automatique email (verrouille, non modifiable)
+        * Pre-remplissage automatique du nom complet (modifiable par l'utilisateur)
+        * Bandeau bleu d'information "Connecte via Google !"
+        * Appel de updateUserProfile() pour sauvegarder profil + mot de passe
+    - Logique d'inscription standard (email/password) :
+        * Verification de la correspondance des mots de passe
+        * Appel de signUpUser() avec toutes les donnees du formulaire
+    - Redirection automatique selon le type de compte apres succes
+    - Affichage des messages d'erreur et de succes (AnimatePresence)
+    - Boutons Google et Facebook visibles uniquement sur l'inscription normale (pas sur completion OAuth)
+    - Composant encapsule dans <Suspense> pour compatibilite Next.js (useSearchParams)
+
+
+=== PACKAGES INSTALLES ===
+--------------------------------------------------
+- @supabase/supabase-js : Client Supabase de base (API Auth, DB)
+- @supabase/ssr         : Gestion des sessions Supabase via cookies (obligatoire pour Next.js 15+)
+
+
+=== FLUX D'AUTHENTIFICATION IMPLEMENTS ===
+--------------------------------------------------
+
+[Inscription Email/Mot de passe]
+  /signup -> Formulaire -> signUpUser() -> Supabase Auth -> Redirection dashboard
+
+[Connexion Email/Mot de passe]
+  /login -> Formulaire -> logInUser() -> Supabase Auth -> Redirection dashboard
+
+[Connexion Google (nouveau compte)]
+  /login ou /signup -> Bouton Google -> logInWithGoogle() -> Google -> /auth/callback -> profil incomplet -> /signup?step=complete -> updateUserProfile() -> Redirection dashboard
+
+[Connexion Google (compte existant)]
+  /login ou /signup -> Bouton Google -> logInWithGoogle() -> Google -> /auth/callback -> profil complet -> Redirection dashboard directe
+
+================================================================
+// made by larabi
+=== NOUVELLES MODIFICATIONS (SUITE DU PROJET) ===
+--------------------------------------------------
+[BACKEND / BASE DE DONNEES]
+1. back/02_database_extensions.sql (CREE)
+   - Extension du schema : tables `appointments`, `availabilities`, `reviews`, `articles`
+   - Mise a jour de la table profile avec champs suppl. et application des RLS Policies.
+
+[FRONTEND / DASHBOARDS PATIENTS ET MEDECINS]
+2. src/app/dashboardpatientlarabi/page.tsx (REFAIT)
+   - // made by larabi
+   - Interface UI Dashboard avec onglets (Vue d'ensemble, Recherche medecins, RDVs, Articles)
+   - Prise de RDV directement connectee a Supabase.
+   - Design avec Lucide Icons et Framer Motion (Glassmorphism).
+
+3. src/app/dashboardoctlarabi/page.tsx (REFAIT)
+   - // made by larabi
+   - Interface UI Dashboard Medecin avec onglets (Agenda RDVs, Mes patients, Publications).
+   - Validation / Annulation des RDVs avec mise a jour des statuts en temps reel.
+   - Formulaire direct de publication d'articles medicaux.
+
+4. src/app/dashboardpatientlarabi/page.tsx (COULEURS ET PARAMETRE)
+   - // made by larabi
+   - Remplacement de la couleur vert emeraude par du Bleu (charte graphique de la racine).
+   - Ajout d'un bouton et d'un onglet interactif "Parametres" pour le compte patient.
+   
+[GEOLOCALISATION & MAPS (MODIFIE)]
+5. front/.env.local (MODIFIE)
+   - Suppression de Google Maps API Key car nous passons à une solution 100% gratuite (Leaflet/OpenStreetMap).
+
+6. back/02_database_extensions.sql (MODIFIE)
+   - Ajout d'une fonction RPC `get_nearby_doctors` avec la formule mathématique Haversine (calcul du rayon de proximité).
+   
+7. src/app/dashboardpatientlarabi/page.tsx (MODIFIE)
+   - // made by larabi
+   - Intégration de "react-leaflet" (OpenStreetMap) pour remplacer l'iframe statique et Google Maps. Totalement gratuit !
+   - Création du sous-composant asynchrone MapComponent.tsx pour gérer l'affichage sans SSR.
+   - Ajout de la permission native GPS `navigator.geolocation` pour positionner le patient.
+   - Filtrage intelligent des médecins sur la carte grâce au RPC (rayon de 25km).
+
+[PAGE INSCRIPTION - SIGNUP]
+8. src/app/signup/page.tsx (MODIFIE REECRIT COMPLET)
+   - // made by larabi
+   - CORRECTION DU BUG : Les informations obtenues à partir de Google (Full Name, Email) sont maintenant "aspirées" et remplissent automatiquement les inputs vides après une redirection Google.
+   - NOUVELLE FONCTIONNALITE : Intégration de la zone "Localisation Domicile/Cabinet" obligatoire.
+   - Deux méthodes intégrées : Le bouton de recherche manuel de ville (API Geolocation Nominatim). Et le bouton "GPS Auto" (qui localise l'appareil instantanément).
+   - Modification de la procédure handleSubmit pour synchroniser directement les Longitude/Latitude lors du Signup sur la base de données Profiles.
+
+[INTERFACE UTILISATEUR - UI/UX]
+9. src/app/dashboardpatientlarabi/page.tsx (MODIFIE)
+   - Remplacement complet de l'affreuse fenêtre système (window.prompt) par une Modale Front-End (Fenêtre Pop-up animée en React avec framer-motion) pour la prise de Rendez-vous. 
+   - La Modale inclut un champ calendrier (Date) et un champ horloge (Heure) avec un bouton de chargement (loading state).
+
+================================================================
+EOF
+M

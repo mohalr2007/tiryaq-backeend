@@ -1,0 +1,8 @@
+
+> tiryaq-backend@0.1.0 start
+> next start --hostname 0.0.0.0 --port 4000
+
+▲ Next.js 16.2.1
+- Local:         http://localhost:4000
+- Network:       http://0.0.0.0:4000
+✓ Ready in 2000ms

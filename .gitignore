@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment variables (IMPORTANT: ne jamais uploader!)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Next.js build output
+.next/
+out/
+
+# Production build
+build/
+dist/
+
+# Debug logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+build-check.log
+dev*.log
+admin-dev-*.log
+admin-dev-*.err.log
+admin-dev-*.pid
+admin-test-*.txt
+find_query_output*.txt
+.tmp-ai-vision-test.json
+.smoke-start*.log
+*.tsbuildinfo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
