@@ -35,14 +35,25 @@ Copy `.env.example` and fill at least:
 - `ADMIN_SUPABASE_ANON_KEY`
 - `ADMIN_SUPABASE_SERVICE_ROLE_KEY`
 - `ADMIN_SESSION_SECRET`
-- `RESEND_API_KEY`
-- `CRON_SECRET`
+- `APP_BASE_URL`
+- `NEXT_PUBLIC_APP_BASE_URL`
+
+Optional:
+
+- `EMAIL_REMINDERS_ENABLED=true` only if you actually want appointment reminder emails enabled. By default keep it disabled.
+- If you enable reminder emails, also configure:
+  - `RESEND_API_KEY`
+  - `RESEND_FROM_EMAIL`
+  - `RESEND_REPLY_TO`
+  - `CRON_SECRET`
+  - `APPOINTMENT_REMINDER_TIMEZONE`
+  - `APPOINTMENT_REMINDER_WINDOW_MINUTES`
+  - `APPOINTMENT_REMINDER_STALE_CLAIM_MINUTES`
 
 ## Render
 
-- Root directory: `TIRYAQ/backend`
+- Root directory: leave empty when using the dedicated `tiryaq-backeend` repository
 - Build command: `npm install && npm run build`
 - Start command: `npm run start`
 
 `render.yaml` is included as a deployment base.
-"# tiryaq-backeend" 

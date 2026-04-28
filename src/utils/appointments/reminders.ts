@@ -49,6 +49,10 @@ const DEFAULT_TIMEZONE = "Africa/Algiers";
 const DEFAULT_WINDOW_MINUTES = 90;
 const DEFAULT_STALE_CLAIM_MINUTES = 30;
 
+export function areAppointmentReminderEmailsEnabled() {
+  return process.env.EMAIL_REMINDERS_ENABLED?.trim().toLowerCase() === "true";
+}
+
 function getEnvNumber(value: string | undefined, fallback: number) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
@@ -368,6 +372,17 @@ async function markReminderFailure(input: {
 }
 
 export async function dispatchAppointmentReminderEmails(): Promise<ReminderDispatchResult> {
+  if (!areAppointmentReminderEmailsEnabled()) {
+    return {
+      scanned: 0,
+      claimed: 0,
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      errors: [],
+    };
+  }
+
   const resend = getResendClient();
   await clearStaleReminderClaims();
   const candidates = await listReminderCandidates();

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dispatchAppointmentReminderEmails } from "@/utils/appointments/reminders";
+import {
+  areAppointmentReminderEmailsEnabled,
+  dispatchAppointmentReminderEmails,
+} from "@/utils/appointments/reminders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,6 +27,17 @@ async function handleCron(request: NextRequest) {
   try {
     if (!isAuthorized(request)) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (!areAppointmentReminderEmailsEnabled()) {
+      return NextResponse.json(
+        {
+          ok: true,
+          disabled: true,
+          reason: "Appointment reminder emails are disabled.",
+        },
+        { status: 200 }
+      );
     }
 
     const result = await dispatchAppointmentReminderEmails();
