@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { aiDb } from "@/utils/supabase/ai-server-client";
+import { getAiDb } from "@/utils/supabase/ai-server-client";
 
 // ── GET /api/ai-history?patient_id=xxx → load sessions list
 // ── GET /api/ai-history?session_id=xxx → load full session messages
@@ -7,6 +7,7 @@ import { aiDb } from "@/utils/supabase/ai-server-client";
 // ── DELETE /api/ai-history?session_id=xxx → delete session
 
 export async function GET(req: NextRequest) {
+  const aiDb = getAiDb();
   const { searchParams } = new URL(req.url);
   const patientId = searchParams.get("patient_id");
   const sessionId = searchParams.get("session_id");
@@ -45,6 +46,7 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
+    const aiDb = getAiDb();
     const body = await req.json() as {
       action: "create_session" | "update_session" | "append_message";
       patient_id?: string;
@@ -124,6 +126,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const aiDb = getAiDb();
   const { searchParams } = new URL(req.url);
   const sessionId = searchParams.get("session_id");
 
