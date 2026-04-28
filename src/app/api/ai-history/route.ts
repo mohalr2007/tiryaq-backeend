@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { getAiDb } from "@/utils/supabase/ai-server-client";
 
 // ── GET /api/ai-history?patient_id=xxx → load sessions list
@@ -13,9 +14,21 @@ export async function GET(req: NextRequest) {
   const sessionId = searchParams.get("session_id");
 
   try {
+    if (!aiDb) {
+      if (sessionId) {
+        return NextResponse.json({ messages: [], persisted: false });
+      }
+
+      if (patientId) {
+        return NextResponse.json({ sessions: [], persisted: false });
+      }
+    }
+
+    const db = aiDb;
+
     if (sessionId) {
       // Load messages for a specific session
-      const { data, error } = await aiDb
+      const { data, error } = await db!
         .from("chat_messages")
         .select("id, role, content, created_at")
         .eq("session_id", sessionId)
@@ -27,7 +40,7 @@ export async function GET(req: NextRequest) {
 
     if (patientId) {
       // Load last 20 sessions for this patient
-      const { data, error } = await aiDb
+      const { data, error } = await db!
         .from("chat_sessions")
         .select("id, title, specialty, body_zone, is_emergency, created_at, updated_at")
         .eq("patient_id", patientId)
@@ -59,8 +72,23 @@ export async function POST(req: NextRequest) {
       content?: string;
     };
 
+    if (!aiDb) {
+      if (body.action === "create_session") {
+        return NextResponse.json({
+          session_id: body.session_id ?? `local-${randomUUID()}`,
+          persisted: false,
+        });
+      }
+
+      if (body.action === "update_session" || body.action === "append_message") {
+        return NextResponse.json({ ok: true, persisted: false });
+      }
+    }
+
+    const db = aiDb;
+
     if (body.action === "create_session") {
-      const { data, error } = await aiDb
+      const { data, error } = await db!
         .from("chat_sessions")
         .insert({
           patient_id: body.patient_id,
@@ -91,7 +119,7 @@ export async function POST(req: NextRequest) {
       };
       if (body.title) updatePayload.title = body.title;
 
-      const { error } = await aiDb
+      const { error } = await db!
         .from("chat_sessions")
         .update(updatePayload)
         .eq("id", body.session_id);
@@ -101,7 +129,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.action === "append_message") {
-      const { error } = await aiDb
+      const { error } = await db!
         .from("chat_messages")
         .insert({
           session_id: body.session_id,
@@ -110,7 +138,7 @@ export async function POST(req: NextRequest) {
         });
 
       // Also bump session updated_at
-      await aiDb
+      await db!
         .from("chat_sessions")
         .update({ updated_at: new Date().toISOString() })
         .eq("id", body.session_id);
@@ -135,7 +163,13 @@ export async function DELETE(req: NextRequest) {
   }
 
   try {
-    const { error } = await aiDb
+    if (!aiDb) {
+      return NextResponse.json({ ok: true, persisted: false });
+    }
+
+    const db = aiDb;
+
+    const { error } = await db
       .from("chat_sessions")
       .delete()
       .eq("id", sessionId);

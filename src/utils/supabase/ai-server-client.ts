@@ -4,6 +4,13 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 let aiDbInstance: SupabaseClient | null = null;
 
+export function hasAiDbConfig() {
+  return Boolean(
+    process.env.NEXT_PUBLIC_AI_SUPABASE_URL &&
+      process.env.AI_SUPABASE_SERVICE_ROLE,
+  );
+}
+
 export function getAiDb() {
   if (aiDbInstance) {
     return aiDbInstance;
@@ -13,9 +20,7 @@ export function getAiDb() {
   const serviceRole = process.env.AI_SUPABASE_SERVICE_ROLE;
 
   if (!url || !serviceRole) {
-    throw new Error(
-      "AI history client is not configured. Missing NEXT_PUBLIC_AI_SUPABASE_URL or AI_SUPABASE_SERVICE_ROLE.",
-    );
+    return null;
   }
 
   aiDbInstance = createClient(url, serviceRole, {

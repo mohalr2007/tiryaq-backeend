@@ -1,4 +1,5 @@
 import { createBrowserClient } from '@supabase/ssr';
+import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
 
 const REMEMBER_ME_STORAGE_KEY = 'mofid_remember_me';
@@ -59,6 +60,7 @@ type BrowserSupabaseClient = SupabaseClient;
 
 declare global {
     var __mofidSupabaseClient: BrowserSupabaseClient | undefined;
+    var __mofidSupabaseServerClient: BrowserSupabaseClient | undefined;
 }
 
 function buildBrowserClient() {
@@ -87,12 +89,26 @@ function buildBrowserClient() {
     );
 }
 
+function buildServerClient() {
+    return createSupabaseClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+            auth: {
+                persistSession: false,
+                autoRefreshToken: false,
+                detectSessionInUrl: false,
+            },
+        }
+    );
+}
+
 function getErrorMessage(error: unknown) {
     return error instanceof Error ? error.message : String(error);
 }
 
 function wait(ms: number) {
-    return new Promise((resolve) => window.setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function isRetryableFetchIssue(error: unknown) {
@@ -203,7 +219,11 @@ export function hasSupabaseAuthTokenSnapshot(): boolean {
 
 export function createClient() {
     if (typeof window === 'undefined') {
-        return buildBrowserClient();
+        if (!globalThis.__mofidSupabaseServerClient) {
+            globalThis.__mofidSupabaseServerClient = buildServerClient();
+        }
+
+        return globalThis.__mofidSupabaseServerClient;
     }
 
     if (!globalThis.__mofidSupabaseClient) {
