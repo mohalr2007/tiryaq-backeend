@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import Groq from "groq-sdk";
 import { detectMessageLanguage, getLanguageInstruction } from "@/features/ai-assistant/language";
+import { withCors, handleCorsPreflight } from "@/utils/cors";
 
 export const runtime = "nodejs";
 
@@ -250,23 +251,32 @@ export async function POST(req: NextRequest) {
       process.env.GROQ_API_KEY;
 
     if (!apiKey) {
-      return NextResponse.json(
-        { error: "Vision AI non configurée. Ajoutez PATIENT_VISION_API_KEY et DOCTOR_VISION_API_KEY." },
-        { status: 500 }
+      return withCors(
+        NextResponse.json(
+          { error: "Vision AI non configurée. Ajoutez PATIENT_VISION_API_KEY et DOCTOR_VISION_API_KEY." },
+          { status: 500 }
+        ),
+        req,
       );
     }
 
     if (attachments.length === 0) {
-      return NextResponse.json(
-        { error: "Aucune pièce jointe valide n'a été reçue." },
-        { status: 400 }
+      return withCors(
+        NextResponse.json(
+          { error: "Aucune pièce jointe valide n'a été reçue." },
+          { status: 400 }
+        ),
+        req,
       );
     }
 
     if (attachments.length > 5) {
-      return NextResponse.json(
-        { error: "Vous pouvez envoyer jusqu'à 5 pièces jointes maximum." },
-        { status: 400 }
+      return withCors(
+        NextResponse.json(
+          { error: "Vous pouvez envoyer jusqu'à 5 pièces jointes maximum." },
+          { status: 400 }
+        ),
+        req,
       );
     }
 
@@ -311,9 +321,13 @@ export async function POST(req: NextRequest) {
       reply = await rewriteCleanArabic(groq, reply);
     }
 
-    return NextResponse.json({ reply });
+    return withCors(NextResponse.json({ reply }), req);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return withCors(NextResponse.json({ error: message }, { status: 500 }), req);
   }
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsPreflight(request);
 }

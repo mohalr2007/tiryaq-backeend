@@ -60,7 +60,7 @@ export async function requirePatientDashboardAccess() {
   }
 
   if (profile.account_type === "doctor") {
-    redirect("/dashboardoctlarabi");
+    redirect("/doctor-dashboard");
   }
 }
 
@@ -80,7 +80,7 @@ export async function requireDoctorDashboardAccess() {
   }
 
   if (profile.account_type !== "doctor") {
-    redirect("/dashboardpatientlarabi");
+    redirect("/patient-dashboard");
   }
 }
 
@@ -100,10 +100,10 @@ export async function requireDoctorVerificationAccess() {
   }
 
   if (profile.account_type !== "doctor") {
-    redirect("/dashboardpatientlarabi");
+    redirect("/patient-dashboard");
   }
 
   if (isDoctorApproved(profile)) {
-    redirect("/dashboardoctlarabi");
+    redirect("/doctor-dashboard");
   }
 }

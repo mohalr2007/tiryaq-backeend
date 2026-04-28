@@ -155,7 +155,7 @@ function buildReminderEmail(input: {
   const safePatientName = escapeHtml(input.patientName);
   const safeAddress = input.doctorAddress ? escapeHtml(input.doctorAddress) : null;
   const safeMapsLink = input.mapsLink ? escapeHtml(input.mapsLink) : null;
-  const safeDashboardUrl = escapeHtml(`${appBaseUrl}/dashboardpatientlarabi`);
+  const safeDashboardUrl = escapeHtml(`${appBaseUrl}/patient-dashboard`);
 
   const subject = `Rappel rendez-vous demain - TERIAQ | Appointment reminder for tomorrow | تذكير بموعد الغد - TERIAQ`;
 
@@ -215,7 +215,7 @@ function buildReminderEmail(input: {
     `Date et heure: ${frDate}`,
     input.doctorAddress ? `Adresse: ${input.doctorAddress}` : null,
     input.mapsLink ? `Carte: ${input.mapsLink}` : null,
-    `Dashboard: ${appBaseUrl}/dashboardpatientlarabi`,
+    `Dashboard: ${appBaseUrl}/patient-dashboard`,
     "",
     "EN",
     `Hello ${input.patientName},`,
@@ -223,7 +223,7 @@ function buildReminderEmail(input: {
     `Date and time: ${enDate}`,
     input.doctorAddress ? `Address: ${input.doctorAddress}` : null,
     input.mapsLink ? `Map: ${input.mapsLink}` : null,
-    `Dashboard: ${appBaseUrl}/dashboardpatientlarabi`,
+    `Dashboard: ${appBaseUrl}/patient-dashboard`,
     "",
     "AR",
     `مرحباً ${input.patientName}`,
@@ -231,7 +231,7 @@ function buildReminderEmail(input: {
     `التاريخ والوقت: ${arDate}`,
     input.doctorAddress ? `العنوان: ${input.doctorAddress}` : null,
     input.mapsLink ? `الخريطة: ${input.mapsLink}` : null,
-    `لوحة المريض: ${appBaseUrl}/dashboardpatientlarabi`,
+    `لوحة المريض: ${appBaseUrl}/patient-dashboard`,
   ]
     .filter(Boolean)
     .join("\n");

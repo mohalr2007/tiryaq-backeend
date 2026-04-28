@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
 import { detectMessageLanguage, getLanguageInstruction } from "@/features/ai-assistant/language";
+import { withCors, handleCorsPreflight } from "@/utils/cors";
 
 const SYSTEM_PROMPT = `You are "Mofid AI", the professional medical assistant of the TERIAQ platform.
 
@@ -95,7 +96,7 @@ export async function POST(req: NextRequest) {
     const { messages, doctorsSummary, locationBlocked, userRole = "patient" } = body;
 
     if (!messages || !Array.isArray(messages)) {
-      return NextResponse.json({ error: "messages manquants" }, { status: 400 });
+      return withCors(NextResponse.json({ error: "messages manquants" }, { status: 400 }), req);
     }
 
     const lastUserMessage =
@@ -106,9 +107,12 @@ export async function POST(req: NextRequest) {
       process.env.GROQ_API_KEY;
 
     if (!apiKey) {
-      return NextResponse.json(
-        { error: "AI non configurée. Ajoutez PATIENT_AI_API_KEY et DOCTOR_AI_API_KEY." },
-        { status: 500 }
+      return withCors(
+        NextResponse.json(
+          { error: "AI non configurée. Ajoutez PATIENT_AI_API_KEY et DOCTOR_AI_API_KEY." },
+          { status: 500 }
+        ),
+        req,
       );
     }
 
@@ -160,15 +164,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({
-      reply: assistantMsg,
-      specialty: lunaData?.specialty ?? null,
-      bodyZone: lunaData?.bodyZone ?? null,
-      isEmergency: lunaData?.isEmergency ?? false,
-      forceAll: lunaData?.forceAll ?? false,
-    });
+    return withCors(
+      NextResponse.json({
+        reply: assistantMsg,
+        specialty: lunaData?.specialty ?? null,
+        bodyZone: lunaData?.bodyZone ?? null,
+        isEmergency: lunaData?.isEmergency ?? false,
+        forceAll: lunaData?.forceAll ?? false,
+      }),
+      req,
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Internal error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return withCors(NextResponse.json({ error: message }, { status: 500 }), req);
   }
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsPreflight(request);
 }

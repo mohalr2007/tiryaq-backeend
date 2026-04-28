@@ -1,8 +1,9 @@
 import { Buffer } from "buffer";
 import { NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
 import { getDoctorVerificationRequestState, submitDoctorVerificationRequest } from "@/utils/admin-portal/site";
 import { uploadVerificationFileToAdminBucket } from "@/utils/admin-portal/db";
+import { withCors, handleCorsPreflight } from "@/utils/cors";
+import { resolveRequestSupabaseClient } from "@/utils/requestSupabase";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,14 +88,13 @@ async function handleUploadFiles(
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
+    const { client: supabase, user, authError } = await resolveRequestSupabaseClient(request);
 
     if (authError || !user) {
-      return NextResponse.json({ error: "Session docteur introuvable." }, { status: 401 });
+      return withCors(
+        NextResponse.json({ error: "Session docteur introuvable." }, { status: 401 }),
+        request,
+      );
     }
 
     const { data: profile, error: profileError } = await supabase
@@ -104,7 +104,10 @@ export async function POST(request: Request) {
       .single();
 
     if (profileError || !profile || profile.account_type !== "doctor") {
-      return NextResponse.json({ error: "Seuls les docteurs peuvent envoyer une demande de validation." }, { status: 403 });
+      return withCors(
+        NextResponse.json({ error: "Seuls les docteurs peuvent envoyer une demande de validation." }, { status: 403 }),
+        request,
+      );
     }
 
     const formData = await request.formData();
@@ -114,9 +117,12 @@ export async function POST(request: Request) {
     const otherDocuments = asFiles(formData.getAll("otherDocuments"));
 
     if (clinicDocuments.length === 0 || medicalCertificates.length === 0) {
-      return NextResponse.json(
-        { error: "Ajoutez au moins un papier de clinique et un certificat médical." },
-        { status: 400 }
+      return withCors(
+        NextResponse.json(
+          { error: "Ajoutez au moins un papier de clinique et un certificat médical." },
+          { status: 400 }
+        ),
+        request,
       );
     }
 
@@ -131,16 +137,22 @@ export async function POST(request: Request) {
     );
 
     if (currentStatus === "approved") {
-      return NextResponse.json(
-        { error: "Ce docteur est déjà validé. Aucune nouvelle demande n'est nécessaire." },
-        { status: 409 }
+      return withCors(
+        NextResponse.json(
+          { error: "Ce docteur est déjà validé. Aucune nouvelle demande n'est nécessaire." },
+          { status: 409 }
+        ),
+        request,
       );
     }
 
     if (currentStatus === "pending" && hasPendingRequest && hasActiveFiles) {
-      return NextResponse.json(
-        { error: "Une demande de validation est déjà en attente. Patientez jusqu'à la décision de l'admin." },
-        { status: 409 }
+      return withCors(
+        NextResponse.json(
+          { error: "Une demande de validation est déjà en attente. Patientez jusqu'à la décision de l'admin." },
+          { status: 409 }
+        ),
+        request,
       );
     }
 
@@ -157,15 +169,25 @@ export async function POST(request: Request) {
       files: [...clinicUploads, ...medicalUploads, ...otherUploads],
     });
 
-    return NextResponse.json({
-      ok: true,
-      verification,
-      uploadedFiles: clinicUploads.length + medicalUploads.length + otherUploads.length,
-    });
+    return withCors(
+      NextResponse.json({
+        ok: true,
+        verification,
+        uploadedFiles: clinicUploads.length + medicalUploads.length + otherUploads.length,
+      }),
+      request,
+    );
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Impossible d'envoyer la demande de validation." },
-      { status: 500 }
+    return withCors(
+      NextResponse.json(
+        { error: error instanceof Error ? error.message : "Impossible d'envoyer la demande de validation." },
+        { status: 500 }
+      ),
+      request,
     );
   }
+}
+
+export async function OPTIONS(request: Request) {
+  return handleCorsPreflight(request);
 }
