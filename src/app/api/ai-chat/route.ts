@@ -55,6 +55,13 @@ export type ChatMessage = {
   content: string;
 };
 
+type LunaDataPayload = {
+  specialty?: string;
+  bodyZone?: string;
+  isEmergency?: boolean;
+  forceAll?: boolean;
+};
+
 function hasSuspiciousMixedScript(text: string) {
   return /[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/.test(text);
 }
@@ -82,6 +89,39 @@ async function rewriteCleanArabic(groq: Groq, text: string) {
   });
 
   return completion.choices[0]?.message?.content?.trim() || text;
+}
+
+function stripEmptyCodeFences(text: string) {
+  return text.replace(/```(?:json|xml)?\s*```/gi, "");
+}
+
+function extractLunaData(text: string): {
+  cleanedReply: string;
+  lunaData: LunaDataPayload | null;
+} {
+  const patterns = [
+    /<LUNA_DATA>\s*([\s\S]*?)\s*<\/LUNA_DATA>/i,
+    /\(?<LUNA_DATA>\s*([\s\S]*?)\s*<\/LUNA_DATA>\)?/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match?.[1]) {
+      continue;
+    }
+
+    try {
+      const lunaData = JSON.parse(match[1].trim()) as LunaDataPayload;
+      const cleanedReply = stripEmptyCodeFences(text.replace(match[0], ""))
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+      return { cleanedReply, lunaData };
+    } catch (error) {
+      console.error("Failed to parse LUNA_DATA", error);
+    }
+  }
+
+  return { cleanedReply: text.trim(), lunaData: null };
 }
 
 export async function POST(req: NextRequest) {
@@ -149,20 +189,8 @@ export async function POST(req: NextRequest) {
       assistantMsg = await rewriteCleanArabic(groq, assistantMsg);
     }
 
-    // Extract LUNA_DATA - Flexible regex to catch typos like (LUNA_DATA> or <LUNA_DATA)
-    let lunaData: { specialty?: string; bodyZone?: string; isEmergency?: boolean; forceAll?: boolean } | null = null;
-    const match = assistantMsg.match(/[<(]LUNA_DATA[>](.*?)[<]\/LUNA_DATA[>)]/i) || 
-                  assistantMsg.match(/<LUNA_DATA>(.*?)<\/LUNA_DATA>/i);
-                  
-    if (match && match[1]) {
-      try {
-        const jsonContent = match[1].trim();
-        lunaData = JSON.parse(jsonContent) as { specialty?: string; bodyZone?: string; isEmergency?: boolean; forceAll?: boolean };
-        assistantMsg = assistantMsg.replace(match[0], "").trim();
-      } catch (e) {
-        console.error("Failed to parse LUNA_DATA", e);
-      }
-    }
+    const { cleanedReply, lunaData } = extractLunaData(assistantMsg);
+    assistantMsg = cleanedReply;
 
     return withCors(
       NextResponse.json({
