@@ -55,5 +55,8 @@ Optional:
 - Root directory: leave empty when using the dedicated `tiryaq-backeend` repository
 - Build command: `npm install && npm run build`
 - Start command: `npm run start`
+- Production frontend origin expected by backend CORS:
+  - `APP_BASE_URL=https://tiryaq-chi.vercel.app`
+  - `NEXT_PUBLIC_APP_BASE_URL=https://tiryaq-chi.vercel.app`
 
 `render.yaml` is included as a deployment base.

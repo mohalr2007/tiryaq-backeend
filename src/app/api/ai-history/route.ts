@@ -1,6 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { getAiDb } from "@/utils/supabase/ai-server-client";
+import { handleCorsPreflight, withCors } from "@/utils/cors";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (error && typeof error === "object") {
+    const candidate = error as {
+      message?: unknown;
+      details?: unknown;
+      hint?: unknown;
+      code?: unknown;
+    };
+
+    const parts = [
+      typeof candidate.message === "string" ? candidate.message : null,
+      typeof candidate.details === "string" ? candidate.details : null,
+      typeof candidate.hint === "string" ? candidate.hint : null,
+      typeof candidate.code === "string" ? candidate.code : null,
+    ].filter(Boolean);
+
+    if (parts.length > 0) {
+      return parts.join(" | ");
+    }
+  }
+
+  return "Unexpected AI history error.";
+}
 
 // ── GET /api/ai-history?patient_id=xxx → load sessions list
 // ── GET /api/ai-history?session_id=xxx → load full session messages
@@ -16,11 +52,11 @@ export async function GET(req: NextRequest) {
   try {
     if (!aiDb) {
       if (sessionId) {
-        return NextResponse.json({ messages: [], persisted: false });
+        return withCors(NextResponse.json({ messages: [], persisted: false }), req);
       }
 
       if (patientId) {
-        return NextResponse.json({ sessions: [], persisted: false });
+        return withCors(NextResponse.json({ sessions: [], persisted: false }), req);
       }
     }
 
@@ -35,7 +71,7 @@ export async function GET(req: NextRequest) {
         .order("created_at", { ascending: true });
 
       if (error) throw error;
-      return NextResponse.json({ messages: data ?? [] });
+      return withCors(NextResponse.json({ messages: data ?? [] }), req);
     }
 
     if (patientId) {
@@ -48,12 +84,18 @@ export async function GET(req: NextRequest) {
         .limit(20);
 
       if (error) throw error;
-      return NextResponse.json({ sessions: data ?? [] });
+      return withCors(NextResponse.json({ sessions: data ?? [] }), req);
     }
 
-    return NextResponse.json({ error: "Missing patient_id or session_id" }, { status: 400 });
+    return withCors(
+      NextResponse.json({ error: "Missing patient_id or session_id" }, { status: 400 }),
+      req,
+    );
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return withCors(
+      NextResponse.json({ error: getErrorMessage(err) }, { status: 500 }),
+      req,
+    );
   }
 }
 
@@ -74,14 +116,17 @@ export async function POST(req: NextRequest) {
 
     if (!aiDb) {
       if (body.action === "create_session") {
-        return NextResponse.json({
-          session_id: body.session_id ?? `local-${randomUUID()}`,
-          persisted: false,
-        });
+        return withCors(
+          NextResponse.json({
+            session_id: body.session_id ?? `local-${randomUUID()}`,
+            persisted: false,
+          }),
+          req,
+        );
       }
 
       if (body.action === "update_session" || body.action === "append_message") {
-        return NextResponse.json({ ok: true, persisted: false });
+        return withCors(NextResponse.json({ ok: true, persisted: false }), req);
       }
     }
 
@@ -101,7 +146,7 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (error) throw error;
-      return NextResponse.json({ session_id: data.id });
+      return withCors(NextResponse.json({ session_id: data.id }), req);
     }
 
     if (body.action === "update_session") {
@@ -125,7 +170,7 @@ export async function POST(req: NextRequest) {
         .eq("id", body.session_id);
 
       if (error) throw error;
-      return NextResponse.json({ ok: true });
+      return withCors(NextResponse.json({ ok: true }), req);
     }
 
     if (body.action === "append_message") {
@@ -144,12 +189,15 @@ export async function POST(req: NextRequest) {
         .eq("id", body.session_id);
 
       if (error) throw error;
-      return NextResponse.json({ ok: true });
+      return withCors(NextResponse.json({ ok: true }), req);
     }
 
-    return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+    return withCors(NextResponse.json({ error: "Unknown action" }, { status: 400 }), req);
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return withCors(
+      NextResponse.json({ error: getErrorMessage(err) }, { status: 500 }),
+      req,
+    );
   }
 }
 
@@ -159,12 +207,12 @@ export async function DELETE(req: NextRequest) {
   const sessionId = searchParams.get("session_id");
 
   if (!sessionId) {
-    return NextResponse.json({ error: "Missing session_id" }, { status: 400 });
+    return withCors(NextResponse.json({ error: "Missing session_id" }, { status: 400 }), req);
   }
 
   try {
     if (!aiDb) {
-      return NextResponse.json({ ok: true, persisted: false });
+      return withCors(NextResponse.json({ ok: true, persisted: false }), req);
     }
 
     const db = aiDb;
@@ -175,8 +223,15 @@ export async function DELETE(req: NextRequest) {
       .eq("id", sessionId);
 
     if (error) throw error;
-    return NextResponse.json({ ok: true });
+    return withCors(NextResponse.json({ ok: true }), req);
   } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return withCors(
+      NextResponse.json({ error: getErrorMessage(err) }, { status: 500 }),
+      req,
+    );
   }
+}
+
+export async function OPTIONS(request: NextRequest) {
+  return handleCorsPreflight(request, "GET,POST,DELETE,OPTIONS");
 }
