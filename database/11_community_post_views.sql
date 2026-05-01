@@ -37,6 +37,13 @@ on public.community_post_views
 for delete
 using (auth.uid() = viewer_id);
 
+drop policy if exists "Users can refresh their own views" on public.community_post_views;
+create policy "Users can refresh their own views"
+on public.community_post_views
+for update
+using (auth.uid() = viewer_id)
+with check (auth.uid() = viewer_id);
+
 drop view if exists public.community_posts_stats;
 
 create view public.community_posts_stats as
