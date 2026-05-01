@@ -4,7 +4,13 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import Groq from "groq-sdk";
-import { detectMessageLanguage, getLanguageInstruction } from "@/features/ai-assistant/language";
+import {
+  detectMessageLanguage,
+  getLanguageInstruction,
+  getSpecialtyRefusalSentence,
+  isAssistantLanguage,
+  normalizeSpecialtyRefusalLanguage,
+} from "@/features/ai-assistant/language";
 import { withCors, handleCorsPreflight } from "@/utils/cors";
 
 export const runtime = "nodejs";
@@ -20,6 +26,7 @@ type VisionAttachment = {
 type VisionPayload = {
   userRole?: "patient" | "doctor";
   userPrompt?: string;
+  uiLanguage?: string;
   history?: Array<{ role: "user" | "assistant"; content: string }>;
   attachments?: VisionAttachment[];
 };
@@ -27,6 +34,7 @@ type VisionPayload = {
 function buildAttachmentPrompt(
   userRole: "patient" | "doctor",
   languageInstruction: string,
+  refusalSentence: string,
   fileName: string,
   kind: "image" | "pdf"
 ) {
@@ -37,7 +45,7 @@ function buildAttachmentPrompt(
         ? "Analyze the uploaded image for a doctor."
         : "Analyze the uploaded PDF for a doctor.",
       "First identify what the attachment actually contains.",
-      "If it is NOT medical or clinical, you MUST REFUSE to analyze it. Say clearly: 'Ce n'est pas ma spécialité' (or its equivalent in the detected language).",
+      `If it is NOT medical or clinical, you MUST REFUSE to analyze it and start the refusal with this exact sentence: "${refusalSentence}".`,
       "If it is medical, respond with medically careful and operational guidance.",
       "If a finding is uncertain, say so clearly instead of inventing.",
       kind === "image"
@@ -53,7 +61,7 @@ function buildAttachmentPrompt(
       ? "Analyze the uploaded image for a patient."
       : "Analyze the uploaded PDF for a patient.",
     "First identify what the attachment actually contains.",
-    "If it is NOT medical (e.g. math, homework, general docs, academic tests), you MUST REFUSE to analyze it. Say clearly: 'Ce n'est pas ma spécialité'.",
+    `If it is NOT medical (e.g. math, homework, general docs, academic tests), you MUST REFUSE to analyze it and start the refusal with this exact sentence: "${refusalSentence}".`,
     "If it is medical, use careful medical wording, never give a definitive diagnosis, and suggest the most relevant specialist if possible.",
     "Mention urgent warning signs only when the content is clearly medical and justified.",
     `File name: ${fileName}`,
@@ -63,6 +71,7 @@ function buildAttachmentPrompt(
 function buildSynthesisPrompt(
   userRole: "patient" | "doctor",
   languageInstruction: string,
+  refusalSentence: string,
   userPrompt: string,
   attachmentSummaries: string,
   history: Array<{ role: "user" | "assistant"; content: string }>
@@ -76,8 +85,8 @@ function buildSynthesisPrompt(
     `You are Mofid AI, the professional medical assistant of the TERIAQ platform. ${languageInstruction}`,
     "PLATFORM: TERIAQ is a smart medical ecosystem for patients and doctors.",
     "Merge the attachment analyses into one final answer.",
-    "STRICT RULE: If any attachment is non-medical, you MUST REFUSE to discuss it and state 'Ce n'est pas ma spécialité'.",
-    "LANGUAGE RULE: Detect the user's language from the prompt. Respond ENTIRELY in that language.",
+    `STRICT RULE: If any attachment is non-medical, you MUST REFUSE to discuss it and start the refusal with this exact sentence: "${refusalSentence}".`,
+    "LANGUAGE RULE: Follow the provided language instruction strictly and respond ENTIRELY in that language.",
     "If the target language is Arabic, write in clean, natural Arabic only without ANY Latin script noise (like 'hơn').",
     "Do not mention internal processing steps or separate models.",
     "Keep the answer practical and readable.",
@@ -237,7 +246,10 @@ export async function POST(req: NextRequest) {
       (attachment) => attachment.dataUrl && attachment.mimeType && attachment.fileName
     );
     const history = Array.isArray(body.history) ? body.history : [];
-    const language = detectMessageLanguage(userPrompt || history.at(-1)?.content || attachments[0]?.fileName || "");
+    const language = isAssistantLanguage(body.uiLanguage)
+      ? body.uiLanguage
+      : detectMessageLanguage(userPrompt || history.at(-1)?.content || attachments[0]?.fileName || "");
+    const refusalSentence = getSpecialtyRefusalSentence(language);
     const effectiveUserPrompt =
       userPrompt ||
       (language === "ar"
@@ -289,13 +301,13 @@ export async function POST(req: NextRequest) {
         const dataUrl = attachment.dataUrl ?? "";
 
         if (mimeType.startsWith("image/")) {
-          const prompt = buildAttachmentPrompt(userRole, languageInstruction, fileName, "image");
+          const prompt = buildAttachmentPrompt(userRole, languageInstruction, refusalSentence, fileName, "image");
           const reply = await analyzeImage(groq, `${prompt}\n\nUser message: ${effectiveUserPrompt}`.trim(), dataUrl);
           return `Attachment ${index + 1} - ${fileName}\n${reply}`;
         }
 
         if (mimeType === "application/pdf") {
-          const prompt = buildAttachmentPrompt(userRole, languageInstruction, fileName, "pdf");
+          const prompt = buildAttachmentPrompt(userRole, languageInstruction, refusalSentence, fileName, "pdf");
           const reply = await analyzePdf(groq, `${prompt}\n\nUser message: ${effectiveUserPrompt}`.trim(), dataUrl, fileName);
           return `Attachment ${index + 1} - ${fileName}\n${reply}`;
         }
@@ -309,7 +321,7 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: "user",
-          content: buildSynthesisPrompt(userRole, languageInstruction, effectiveUserPrompt, analyses.join("\n\n"), history),
+          content: buildSynthesisPrompt(userRole, languageInstruction, refusalSentence, effectiveUserPrompt, analyses.join("\n\n"), history),
         },
       ],
       temperature: 0.25,
@@ -320,6 +332,7 @@ export async function POST(req: NextRequest) {
     if (language === "ar" && hasSuspiciousMixedScript(reply)) {
       reply = await rewriteCleanArabic(groq, reply);
     }
+    reply = normalizeSpecialtyRefusalLanguage(reply, language);
 
     return withCors(NextResponse.json({ reply }), req);
   } catch (error) {

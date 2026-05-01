@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import Groq from "groq-sdk";
-import { detectMessageLanguage, getLanguageInstruction } from "@/features/ai-assistant/language";
+import {
+  detectMessageLanguage,
+  getLanguageInstruction,
+  getSpecialtyRefusalSentence,
+  isAssistantLanguage,
+  normalizeSpecialtyRefusalLanguage,
+} from "@/features/ai-assistant/language";
 import { withCors, handleCorsPreflight } from "@/utils/cors";
 
 const SYSTEM_PROMPT = `You are "Mofid AI", the professional medical assistant of the TERIAQ platform.
@@ -14,13 +20,13 @@ const SYSTEM_PROMPT = `You are "Mofid AI", the professional medical assistant of
 ━━━ SCOPE & GUARDRAILS (ULTRA-STRICT) ━━━
 - You are a SPECIALIZED MEDICAL AI. You ONLY answer health, medical, anatomy, and wellness related questions.
 - If the user asks about ANY other topic (politics, history, math, physics, coding, general knowledge, etc.), you MUST explicitly refuse.
-- Your refusal MUST include the phrase: "Ce n'est pas ma spécialité" (or "هذا ليس من تخصصي" in Arabic, or "This is not my specialty" in English).
+- When refusing an out-of-scope request, you MUST start the refusal with the exact sentence provided in [SPECIALTY_REFUSAL_SENTENCE], then continue in that same language if needed.
 - DO NOT solve non-medical problems. DO NOT summarize non-medical text. Refocus on medical assistance.
 
 ━━━ LANGUAGE & CONTEXT RULE (CRITICAL) ━━━
-- Read the LAST user message and detect its language. Respond ENTIRELY in that language.
-- LANGUAGE SWITCHING IS MANDATORY: Even if the conversation started in another language, you MUST switch to the user's latest language immediately. NEVER refuse to switch.
-- NEVER say "as we started in [language], I will continue in [language]". This is forbidden. Always follow the user's current language.
+- Respond ENTIRELY in the language specified by [TARGET_RESPONSE_LANGUAGE]. This language matches the application's active locale.
+- NEVER inject French, Arabic, or English text from another language unless the user explicitly asks for translation.
+- NEVER say "as we started in [language], I will continue in [language]". This is forbidden. Always follow [TARGET_RESPONSE_LANGUAGE].
 - If the target language is Arabic, use natural Modern Standard Arabic. NEVER mix scripts.
 - If the user asks for a translation of a previous message, provide it accurately.
 
@@ -131,9 +137,10 @@ export async function POST(req: NextRequest) {
       doctorsSummary?: string;
       locationBlocked?: boolean;
       userRole?: string;
+      uiLanguage?: string;
     };
 
-    const { messages, doctorsSummary, locationBlocked, userRole = "patient" } = body;
+    const { messages, doctorsSummary, locationBlocked, userRole = "patient", uiLanguage } = body;
 
     if (!messages || !Array.isArray(messages)) {
       return withCors(NextResponse.json({ error: "messages manquants" }, { status: 400 }), req);
@@ -141,7 +148,10 @@ export async function POST(req: NextRequest) {
 
     const lastUserMessage =
       [...messages].reverse().find((message) => message.role === "user")?.content ?? "";
-    const responseLanguage = detectMessageLanguage(lastUserMessage);
+    const responseLanguage = isAssistantLanguage(uiLanguage)
+      ? uiLanguage
+      : detectMessageLanguage(lastUserMessage);
+    const specialtyRefusalSentence = getSpecialtyRefusalSentence(responseLanguage);
     const apiKey =
       (userRole === "doctor" ? process.env.DOCTOR_AI_API_KEY : process.env.PATIENT_AI_API_KEY) ||
       process.env.GROQ_API_KEY;
@@ -160,7 +170,9 @@ export async function POST(req: NextRequest) {
     let systemContent = SYSTEM_PROMPT;
     systemContent += `\n\n[USER_ROLE: ${userRole}]`;
     systemContent += `\n[TARGET_RESPONSE_LANGUAGE: ${responseLanguage}]`;
+    systemContent += `\n[SPECIALTY_REFUSAL_SENTENCE: ${specialtyRefusalSentence}]`;
     systemContent += `\n${getLanguageInstruction(responseLanguage)}`;
+    systemContent += `\nUse [SPECIALTY_REFUSAL_SENTENCE] exactly once at the start of an out-of-scope refusal.`;
 
     if (userRole === "patient") {
       if (doctorsSummary) {
@@ -188,6 +200,7 @@ export async function POST(req: NextRequest) {
     if (responseLanguage === "ar" && hasSuspiciousMixedScript(assistantMsg)) {
       assistantMsg = await rewriteCleanArabic(groq, assistantMsg);
     }
+    assistantMsg = normalizeSpecialtyRefusalLanguage(assistantMsg, responseLanguage);
 
     const { cleanedReply, lunaData } = extractLunaData(assistantMsg);
     assistantMsg = cleanedReply;
